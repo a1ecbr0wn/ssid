@@ -14,8 +14,9 @@ via `#[cfg(target_os)]`. Callers see only the public API in `src/lib.rs`.
 ssid/
   src/
     lib.rs          (public API + cfg dispatch)
-    linux.rs        (SIOCGIWESSID ioctl)
-    macos.rs        (CoreWLAN via objc2)
+    linux.rs        (nl80211 via neli)
+    macos.rs        (CoreWLAN via objc2-core-wlan)
+    ios.rs          (NEHotspotNetwork via NetworkExtension)
     windows.rs      (WlanQueryInterface via windows crate)
     unsupported.rs  (returns None)
 ```
@@ -45,10 +46,13 @@ mod platform { pub use super::linux::*; }
 #[cfg(target_os = "macos")]
 mod platform { pub use super::macos::*; }
 
+#[cfg(target_os = "ios")]
+mod platform { pub use super::ios::*; }
+
 #[cfg(target_os = "windows")]
 mod platform { pub use super::windows::*; }
 
-#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios", target_os = "windows")))]
 mod platform { pub use super::unsupported::*; }
 ```
 
@@ -117,6 +121,35 @@ valid Apple Developer ID certificate.
 
 ---
 
+## iOS Implementation (`src/ios.rs`)
+
+Uses `NEHotspotNetwork` from the `NetworkExtension` framework via `objc2`.
+
+### iOS `get_ssid`
+
+```text
+NEHotspotNetwork::fetchCurrentWithCompletionHandler(block)
+  → completion block receives Option<NEHotspotNetwork>
+  → .ssid                                // → NSString?
+  → NSString → String
+```
+
+`fetchCurrentWithCompletionHandler` is async at the Objective-C level; the
+implementation blocks a thread using a `DispatchSemaphore` (or equivalent) to
+satisfy the synchronous Rust API contract.
+
+### iOS `get_ssid_for_interface`
+
+iOS does not expose per-interface selection. This function ignores `interface_name`
+and delegates to `get_ssid()`.
+
+**Known limitation (iOS)**: The binary must be code-signed with the
+`com.apple.developer.networking.wifi-info` entitlement and the user must have granted
+location permission (`NSLocationWhenInUseUsageDescription`) at runtime. Without either,
+`NEHotspotNetwork.fetchCurrent()` returns `nil` and `get_ssid()` returns `None`.
+
+---
+
 ## Windows Implementation (`src/windows.rs`)
 
 Uses the `windows` crate with feature `Win32_NetworkManagement_Wlan`.
@@ -167,11 +200,14 @@ pub fn get_ssid_for_interface(_: &str) -> Option<String> { None }
 
 | Crate     | Platform | Notes                                                |
 | --------- | -------- | ---------------------------------------------------- |
-| `neli`               | Linux   | generic netlink socket and nl80211 attribute parsing  |
-| `objc2-core-wlan`    | macOS   | safe Rust bindings for `CWWiFiClient` / `CWInterface` |
-| `objc2-foundation`   | macOS   | `NSString` conversion                                 |
-| `objc2`              | macOS   | Objective-C runtime support                           |
-| `windows`            | Windows | WiFi API — feature `Win32_NetworkManagement_Wlan`     |
+| `neli`                    | Linux        | generic netlink socket and nl80211 attribute parsing  |
+| `objc2-core-wlan`         | macOS        | safe Rust bindings for `CWWiFiClient` / `CWInterface` |
+| `objc2-foundation`        | macOS        | `NSString` conversion                                 |
+| `objc2`                   | macOS        | Objective-C runtime support                           |
+| `objc2-network-extension` | iOS          | `NEHotspotNetwork` bindings                           |
+| `objc2-foundation`        | iOS          | `NSString` conversion                                 |
+| `objc2`                   | iOS          | Objective-C runtime support                           |
+| `windows`                 | Windows      | WiFi API — feature `Win32_NetworkManagement_Wlan`     |
 
 Platform-specific deps are gated with `[target.'cfg(target_os = "...")'.dependencies]`
 in `Cargo.toml` so they don't compile on other platforms.

@@ -38,6 +38,7 @@ Uses `CWWiFiClient` from the CoreWLAN framework. On macOS 14+ the binary must be
 To sign your binary with the required entitlement:
 
 1. Create `ssid.entitlements`:
+
    ```xml
    <?xml version="1.0" encoding="UTF-8"?>
    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -48,6 +49,7 @@ To sign your binary with the required entitlement:
    ```
 
 2. Sign with a Developer ID Application certificate (requires [Apple Developer Program](https://developer.apple.com/programs/) membership):
+
    ```sh
    codesign --force \
      --sign "Developer ID Application: Your Name (TEAMID)" \
@@ -56,6 +58,16 @@ To sign your binary with the required entitlement:
    ```
 
 Ad-hoc signing (`--sign -`) is not sufficient — macOS kills the process immediately when it tries to claim this entitlement without a valid certificate.
+
+### iOS
+
+Uses `NEHotspotNetwork.fetchCurrentWithCompletionHandler` from the NetworkExtension
+framework. The binary must be **code-signed with the `com.apple.developer.networking.wifi-info`
+entitlement** and the user must have granted location permission
+(`NSLocationWhenInUseUsageDescription`) at runtime. Without either, `get_ssid()` returns `None`.
+
+iOS does not expose per-interface WiFi selection, so `get_ssid_for_interface()` ignores
+the interface name and delegates to `get_ssid()`.
 
 ### Windows
 

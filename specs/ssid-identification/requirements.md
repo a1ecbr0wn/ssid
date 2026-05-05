@@ -3,7 +3,7 @@
 ## Introduction
 
 This spec covers a standalone, cross-platform Rust crate (`ssid`) that identifies the
-SSID of the WiFi network the host computer is currently connected to.
+SSID of the WiFi network the host computer or device is currently connected to.
 
 The crate abstracts platform-specific WiFi APIs behind a simple synchronous function,
 returning `None` when no wireless connection is active or the platform is unsupported.
@@ -63,18 +63,29 @@ resolution to work on my platform without additional configuration.
      first one that is associated.
    - Kernels older than 2.6.22 (no `nl80211` support) are explicitly out of scope and
      will receive `None`.
-2. **macOS** — THE macOS implementation SHALL use the CoreWLAN framework via `objc2`
-   Objective-C messaging:
-   - `get_ssid()`: `[CWWiFiClient sharedWiFiClient]` → `[client interface]` → `[iface ssid]`
-   - `get_ssid_for_interface()`: `[client interfaceWithName: name]` → `[iface ssid]`
-3. **Windows** — THE Windows implementation SHALL use `WlanOpenHandle`,
+2. **macOS** — THE macOS implementation SHALL use the CoreWLAN framework via
+   `objc2-core-wlan`:
+   - `get_ssid()`: `CWWiFiClient::sharedWiFiClient()` → `.interface()` → `.ssid()`
+   - `get_ssid_for_interface()`: `CWWiFiClient::sharedWiFiClient()` →
+     `.interfaceWithName(name)` → `.ssid()`
+   - On macOS 14+ the binary must be code-signed with the `com.apple.wifi.manager`
+     entitlement; unsigned binaries receive `None`.
+3. **iOS** — THE iOS implementation SHALL use `NEHotspotNetwork.fetchCurrent()` from
+   the `NetworkExtension` framework:
+   - `get_ssid()` SHALL call `NEHotspotNetwork.fetchCurrent()` and return the SSID of
+     the current network, or `None` if not associated.
+   - `get_ssid_for_interface()` SHALL ignore `interface_name` and delegate to
+     `get_ssid()`, as iOS does not expose per-interface selection.
+   - The binary must be code-signed with the `com.apple.developer.networking.wifi-info`
+     entitlement and the user must have granted location permission.
+4. **Windows** — THE Windows implementation SHALL use `WlanOpenHandle`,
    `WlanQueryInterface` (opcode `wlan_intf_opcode_current_connection`), and
    `WlanCloseHandle` from the `windows` crate
    (`Win32_NetworkManagement_Wlan` feature).
    - `get_ssid()` SHALL call `WlanEnumInterfaces` and return the SSID of the first
      connected interface found.
-4. **Other platforms** — THE fallback implementation SHALL return `None`.
-5. ALL implementations SHALL return `None` when the interface is not found, not
+5. **Other platforms** — THE fallback implementation SHALL return `None`.
+6. ALL implementations SHALL return `None` when the interface is not found, not
    wireless, or not associated.
 
 ---

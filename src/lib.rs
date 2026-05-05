@@ -1,19 +1,33 @@
 //! Cross-platform crate to identify the WiFi SSID of the connected network.
 
+#[cfg(target_os = "ios")]
+mod ios;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
-#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "windows"
+)))]
 mod unsupported;
 #[cfg(target_os = "windows")]
 mod windows;
 
+#[cfg(target_os = "ios")]
+use ios as platform;
 #[cfg(target_os = "linux")]
 use linux as platform;
 #[cfg(target_os = "macos")]
 use macos as platform;
-#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "windows"
+)))]
 use unsupported as platform;
 #[cfg(target_os = "windows")]
 use windows as platform;
