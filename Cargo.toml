@@ -1,0 +1,35 @@
+[package]
+name = "ssid"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Cross-platform crate to identify the WiFi SSID of the connected network"
+license = "Apache-2.0"
+repository = "https://github.com/a1ecbr0wn/ssid"
+
+[[bin]]
+name = "ssid"
+path = "src/main.rs"
+
+[dependencies]
+log = "0.4"
+
+[features]
+wifi_test = []
+
+[target.'cfg(target_os = "linux")'.dependencies]
+neli = "0.7.4"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.4"
+objc2-core-wlan = { version = "0.3.2", features = ["CWWiFiClient", "CWInterface"] }
+objc2-foundation = "0.3.2"
+
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = "0.6.4"
+objc2-network-extension = { version = "0.3", features = ["block2"] }
+objc2-foundation = "0.3.2"
+block2 = "0.6.2"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62.2", features = ["Win32_NetworkManagement_WiFi"] }
