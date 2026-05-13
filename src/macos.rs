@@ -1,6 +1,7 @@
 use objc2_core_wlan::{CWInterface, CWWiFiClient};
 use objc2_foundation::NSString;
 
+#[cfg(target_os = "macos")]
 fn interface_ssid(iface: &CWInterface) -> Option<String> {
     let ssid = unsafe { iface.ssid() }?;
     let s = ssid.to_string();

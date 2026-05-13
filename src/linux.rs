@@ -231,7 +231,9 @@ fn ssid_for_ifindex(socket: &NlRouter, family_id: u16, ifindex: u32) -> Option<S
         let msg = match response {
             Ok(m) => m,
             Err(e) => {
-                log::warn!("nl80211: recv error in GetScan for ifindex {ifindex}, stopping iteration: {e}");
+                log::warn!(
+                    "nl80211: recv error in GetScan for ifindex {ifindex}, stopping iteration: {e}"
+                );
                 break;
             }
         };
