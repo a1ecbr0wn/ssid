@@ -9,13 +9,15 @@ use windows::core::GUID;
 fn open_handle() -> Option<HANDLE> {
     let mut negotiated_ver = 0u32;
     let mut handle = HANDLE::default();
-    unsafe { WlanOpenHandle(2, None, &mut negotiated_ver, &mut handle).ok() }.ok()?;
+    if unsafe { WlanOpenHandle(2, None, &mut negotiated_ver, &mut handle) } != 0 {
+        return None;
+    }
     Some(handle)
 }
 
 fn enum_interface_guids(handle: HANDLE) -> Vec<(String, GUID)> {
     let mut list_ptr = std::ptr::null_mut();
-    if unsafe { WlanEnumInterfaces(handle, None, &mut list_ptr) }.is_err() {
+    if unsafe { WlanEnumInterfaces(handle, None, &mut list_ptr) } != 0 {
         return Vec::new();
     }
     let list = unsafe { &*list_ptr };
@@ -43,7 +45,7 @@ fn query_ssid(handle: HANDLE, guid: &GUID) -> Option<String> {
     let mut data_size = 0u32;
     let mut data_ptr: *mut c_void = std::ptr::null_mut();
     let mut opcode_type = Default::default();
-    unsafe {
+    let result = unsafe {
         WlanQueryInterface(
             handle,
             guid,
@@ -53,7 +55,9 @@ fn query_ssid(handle: HANDLE, guid: &GUID) -> Option<String> {
             &mut data_ptr as *mut *mut c_void,
             Some(&mut opcode_type),
         )
-        .ok()?;
+    };
+    if result != 0 {
+        return None;
     }
     let attrs = unsafe { &*(data_ptr as *const WLAN_CONNECTION_ATTRIBUTES) };
     let dot11 = &attrs.wlanAssociationAttributes.dot11Ssid;
