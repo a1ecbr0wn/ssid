@@ -7,10 +7,25 @@ on:
       - "v*"
   workflow_dispatch:
 
+env:
+  RUSTFLAGS: "--deny warnings"
+
 jobs:
-  release-tag:
-    name: Build tag as a release
-    runs-on: ubuntu-latest
+  build-release:
+    name: Build release binary
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: ssid-x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: ssid-aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: ssid-x86_64-pc-windows-msvc.exe
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
@@ -22,10 +37,40 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-          target: x86_64-unknown-linux-gnu
+          target: ${{ matrix.target }}
 
       - name: Build
-        run: cargo build --release
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Rename binary (unix)
+        if: runner.os != 'Windows'
+        run: mv target/${{ matrix.target }}/release/ssid ${{ matrix.artifact }}
+
+      - name: Rename binary (windows)
+        if: runner.os == 'Windows'
+        run: mv target/${{ matrix.target }}/release/ssid.exe ${{ matrix.artifact }}
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  release-tag:
+    name: Create GitHub release
+    needs: build-release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
       - name: Generate a changelog
         uses: orhun/git-cliff-action@v4
@@ -35,8 +80,6 @@ jobs:
         env:
           OUTPUT: CHANGELOG.md
           GITHUB_REPO: ${{ github.repository }}
-          files: |
-            LICENSE
 
       - name: Upload Release Artifacts
         uses: softprops/action-gh-release@v2
@@ -45,6 +88,9 @@ jobs:
           tag_name: "${{ github.ref_name }}"
           name: "Release ${{ github.ref_name }}"
           token: "${{ secrets.GITHUB_TOKEN }}"
+          files: |
+            artifacts/**/*
+            LICENSE
 
   publish-to-crates:
     name: Publish tag to crates.io
@@ -59,10 +105,6 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-          target: x86_64-unknown-linux-gnu
-
-      - name: Build
-        run: cargo build --release
 
       - name: Publish to crates.io
         env:
