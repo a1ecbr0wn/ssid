@@ -21,7 +21,7 @@ ssid/
     unsupported.rs  (returns None)
 ```
 
-No binary, no async, no build script required on Linux/Windows.
+No async runtime. No build script required on any platform.
 
 ---
 
