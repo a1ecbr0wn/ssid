@@ -204,10 +204,12 @@ fn ssid_for_ifindex(socket: &NlRouter, family_id: u16, ifindex: u32) -> Option<S
             AttrTypeBuilder::default()
                 .nla_type(Nl80211Attr::Ifindex)
                 .build()
+                .map_err(|e| log::warn!("nl80211: failed to build AttrType for ifindex: {e}"))
                 .ok()?,
         )
         .nla_payload(ifindex)
         .build()
+        .map_err(|e| log::warn!("nl80211: failed to build Nlattr for ifindex: {e}"))
         .ok()?;
     let attrs: GenlBuffer<Nl80211Attr, Buffer> = std::iter::once(ifindex_attr).collect();
 
@@ -216,6 +218,7 @@ fn ssid_for_ifindex(socket: &NlRouter, family_id: u16, ifindex: u32) -> Option<S
         .version(1)
         .attrs(attrs)
         .build()
+        .map_err(|e| log::warn!("nl80211: failed to build GetScan message: {e}"))
         .ok()?;
 
     let recv = socket
