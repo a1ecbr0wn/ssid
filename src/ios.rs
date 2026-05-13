@@ -10,6 +10,16 @@ pub fn get_ssid_for_interface(_interface_name: &str) -> Option<String> {
     get_ssid()
 }
 
+/// Returns the SSID of the current WiFi network via `NEHotspotNetwork::fetchCurrentWithCompletionHandler`.
+///
+/// The Objective-C API is asynchronous; this function blocks the calling thread
+/// on a channel until the completion handler fires. Returns `None` if the device
+/// is not associated with a WiFi network or if the SSID is empty.
+///
+/// Requires the `com.apple.developer.networking.wifi-info` entitlement and that
+/// the user has granted location permission (`NSLocationWhenInUseUsageDescription`).
+/// Without either, the completion handler receives `nil` and this function
+/// returns `None`.
 #[cfg(target_os = "ios")]
 pub fn get_ssid() -> Option<String> {
     let (tx, rx) = mpsc::sync_channel::<Option<String>>(1);

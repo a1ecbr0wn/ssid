@@ -8,6 +8,12 @@ fn interface_ssid(iface: &CWInterface) -> Option<String> {
     if s.is_empty() { None } else { Some(s) }
 }
 
+/// Returns the SSID of the default WiFi interface via `CWWiFiClient`.
+///
+/// Returns `None` if no default interface is available, the interface is not
+/// associated, or the SSID is empty (hidden network). On macOS 14+ the process
+/// must hold the `com.apple.wifi.manager` entitlement; without it the OS
+/// returns an empty SSID and this function returns `None`.
 #[cfg(target_os = "macos")]
 pub fn get_ssid() -> Option<String> {
     let client = unsafe { CWWiFiClient::sharedWiFiClient() };
@@ -18,6 +24,11 @@ pub fn get_ssid() -> Option<String> {
     interface_ssid(&iface)
 }
 
+/// Returns the SSID of the named WiFi interface via `CWWiFiClient::interfaceWithName`.
+///
+/// Returns `None` if the interface name is not recognised, the interface is not
+/// associated, or the SSID is empty. On macOS 14+ the `com.apple.wifi.manager`
+/// entitlement is required (same as [`get_ssid`]).
 #[cfg(target_os = "macos")]
 pub fn get_ssid_for_interface(interface_name: &str) -> Option<String> {
     let client = unsafe { CWWiFiClient::sharedWiFiClient() };
