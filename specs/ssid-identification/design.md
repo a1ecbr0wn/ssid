@@ -37,23 +37,14 @@ pub fn get_ssid_for_interface(interface_name: &str) -> Option<String> {
 }
 ```
 
-Platform dispatch:
+Platform dispatch (each platform module is conditionally compiled, then aliased):
 
 ```rust
-#[cfg(target_os = "linux")]
-mod platform { pub use super::linux::*; }
-
-#[cfg(target_os = "macos")]
-mod platform { pub use super::macos::*; }
-
-#[cfg(target_os = "ios")]
-mod platform { pub use super::ios::*; }
-
-#[cfg(target_os = "windows")]
-mod platform { pub use super::windows::*; }
-
-#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios", target_os = "windows")))]
-mod platform { pub use super::unsupported::*; }
+#[cfg(target_os = "linux")]   use linux as platform;
+#[cfg(target_os = "macos")]   use macos as platform;
+#[cfg(target_os = "ios")]     use ios as platform;
+#[cfg(target_os = "windows")] use windows as platform;
+#[cfg(not(any(...)))]         use unsupported as platform;
 ```
 
 ---
@@ -187,7 +178,7 @@ error paths and the no-GUID-match early return) to prevent handle leaks.
 Calls `WlanEnumInterfaces`, iterates all interfaces, calls
 `get_ssid_for_interface` on each, returns the first `Some`.
 
-New dependency: `windows = { version = "0.58", features = ["Win32_NetworkManagement_Wlan"] }`.
+New dependency: `windows = { version = "0.62", features = ["Win32_NetworkManagement_WiFi"] }`.
 
 ---
 
@@ -212,7 +203,8 @@ pub fn get_ssid_for_interface(_: &str) -> Option<String> { None }
 | `objc2-network-extension` | iOS          | `NEHotspotNetwork` bindings                           |
 | `objc2-foundation`        | iOS          | `NSString` conversion                                 |
 | `objc2`                   | iOS          | Objective-C runtime support                           |
-| `windows`                 | Windows      | WiFi API — feature `Win32_NetworkManagement_Wlan`     |
+| `block2`                  | iOS          | explicit dep required for block closure support       |
+| `windows`                 | Windows      | WiFi API — feature `Win32_NetworkManagement_WiFi`     |
 
 Platform-specific deps are gated with `[target.'cfg(target_os = "...")'.dependencies]`
 in `Cargo.toml` so they don't compile on other platforms.
