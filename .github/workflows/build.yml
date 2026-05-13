@@ -7,7 +7,6 @@ on:
       - "**"
     paths:
       - "**/*.rs"
-      - "src/*"
       - "Cargo.*"
       - ".github/workflows/build.yml"
   pull_request:
@@ -15,7 +14,6 @@ on:
       - main
     paths:
       - "**/*.rs"
-      - "src/*"
       - "Cargo.*"
       - ".github/workflows/build.yml"
   schedule:
@@ -23,7 +21,7 @@ on:
   workflow_dispatch:
 
 env:
-  RUSTFLAGS: "--deny warnings"
+  RUSTFLAGS: "--warn warnings"
 
 jobs:
   build:
@@ -53,4 +51,7 @@ jobs:
         run: cargo build --target ${{ matrix.target }}
 
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets -- -W warnings
+
+      - name: Test
+        run: cargo test

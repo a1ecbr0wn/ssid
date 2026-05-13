@@ -10,7 +10,10 @@ fn interface_ssid(iface: &CWInterface) -> Option<String> {
 #[cfg(target_os = "macos")]
 pub fn get_ssid() -> Option<String> {
     let client = unsafe { CWWiFiClient::sharedWiFiClient() };
-    let iface = unsafe { client.interface() }?;
+    let iface = unsafe { client.interface() }.or_else(|| {
+        log::warn!("macos: no default WiFi interface available");
+        None
+    })?;
     interface_ssid(&iface)
 }
 
@@ -18,7 +21,10 @@ pub fn get_ssid() -> Option<String> {
 pub fn get_ssid_for_interface(interface_name: &str) -> Option<String> {
     let client = unsafe { CWWiFiClient::sharedWiFiClient() };
     let name = NSString::from_str(interface_name);
-    let iface = unsafe { client.interfaceWithName(Some(&name)) }?;
+    let iface = unsafe { client.interfaceWithName(Some(&name)) }.or_else(|| {
+        log::warn!("macos: interface '{interface_name}' not found");
+        None
+    })?;
     interface_ssid(&iface)
 }
 

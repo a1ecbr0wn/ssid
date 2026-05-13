@@ -11,6 +11,9 @@ repository = "https://github.com/a1ecbr0wn/ssid"
 name = "ssid"
 path = "src/main.rs"
 
+[dependencies]
+log = "0.4"
+
 [features]
 wifi_test = []
 

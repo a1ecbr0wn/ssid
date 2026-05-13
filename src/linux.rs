@@ -19,14 +19,15 @@ const IE_TYPE_SSID: u8 = 0;
 
 use neli::{
     consts::{
-        nl::{GenlId, NlmF, NlmFFlags},
+        nl::{GenlId, NlmF},
         socket::NlFamily,
     },
-    genl::{Genlmsghdr, Nlattr},
+    genl::{AttrTypeBuilder, Genlmsghdr, GenlmsghdrBuilder, Nlattr, NlattrBuilder, NoUserHeader},
     neli_enum,
-    nl::{NlPayload, Nlmsghdr},
-    socket::NlSocketHandle,
+    nl::NlPayload,
+    router::synchronous::NlRouter,
     types::{Buffer, GenlBuffer},
+    utils::Groups,
 };
 
 #[neli_enum(serialized_type = "u8")]
@@ -51,11 +52,18 @@ enum Nl80211BssAttr {
 }
 impl neli::consts::genl::NlAttrType for Nl80211BssAttr {}
 
-/// Open a generic netlink socket connected to the nl80211 family, returning
-/// the socket and the resolved family ID.
-fn open_socket() -> Option<(NlSocketHandle, u16)> {
-    let mut socket = NlSocketHandle::connect(NlFamily::Generic, None, &[]).ok()?;
-    let family_id = socket.resolve_genl_family("nl80211").ok()?;
+/// Open a generic netlink socket connected to the nl80211 family.
+///
+/// Returns the router and the resolved nl80211 family ID, or `None` if the
+/// nl80211 family is unavailable (no wireless hardware or insufficient permissions).
+fn open_socket() -> Option<(NlRouter, u16)> {
+    let (socket, _) = NlRouter::connect(NlFamily::Generic, Some(0), Groups::empty())
+        .map_err(|e| log::warn!("nl80211: failed to open netlink socket: {e}"))
+        .ok()?;
+    let family_id = socket
+        .resolve_genl_family("nl80211")
+        .map_err(|e| log::warn!("nl80211: family not found (no wireless hardware?): {e}"))
+        .ok()?;
     Some((socket, family_id))
 }
 
@@ -94,16 +102,16 @@ fn ssid_from_bss_attr(bss_attr: &Nlattr<Nl80211Attr, Buffer>) -> Option<String> 
     let mut ssid: Option<String> = None;
 
     for attr in handle.iter() {
-        match attr.nla_type.nla_type {
+        match attr.nla_type().nla_type() {
             Nl80211BssAttr::Status => {
-                let bytes = attr.nla_payload.as_ref();
+                let bytes = attr.nla_payload().as_ref();
                 if bytes.len() >= 4 {
                     // netlink delivers integers in host byte order
                     status = Some(u32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]));
                 }
             }
             Nl80211BssAttr::InformationElements => {
-                ssid = ssid_from_ies(attr.nla_payload.as_ref());
+                ssid = ssid_from_ies(attr.nla_payload().as_ref());
             }
             // neli may surface kernel attribute IDs not mapped in this enum
             _ => {}
@@ -118,34 +126,47 @@ fn ssid_from_bss_attr(bss_attr: &Nlattr<Nl80211Attr, Buffer>) -> Option<String> 
 }
 
 /// Enumerate all nl80211 wireless interfaces, returning `(ifindex, ifname)` pairs.
-fn get_interface_list(socket: &mut NlSocketHandle, family_id: u16) -> Vec<(u32, String)> {
-    let genl_hdr: Genlmsghdr<Nl80211Cmd, Nl80211Attr> =
-        Genlmsghdr::new(Nl80211Cmd::GetInterface, 1, GenlBuffer::new());
-    let nl_hdr = Nlmsghdr::new(
-        None,
+fn get_interface_list(socket: &NlRouter, family_id: u16) -> Vec<(u32, String)> {
+    let genl_hdr = match GenlmsghdrBuilder::<Nl80211Cmd, Nl80211Attr, NoUserHeader>::default()
+        .cmd(Nl80211Cmd::GetInterface)
+        .version(1)
+        .build()
+    {
+        Ok(h) => h,
+        Err(e) => {
+            log::warn!("nl80211: failed to build GetInterface message: {e}");
+            return Vec::new();
+        }
+    };
+
+    let recv = match socket.send::<_, _, GenlId, Genlmsghdr<Nl80211Cmd, Nl80211Attr>>(
         family_id,
-        NlmFFlags::new(&[NlmF::Request, NlmF::Dump]),
-        None,
-        None,
+        NlmF::REQUEST | NlmF::DUMP,
         NlPayload::Payload(genl_hdr),
-    );
-    if socket.send(nl_hdr).is_err() {
-        return Vec::new();
-    }
+    ) {
+        Ok(r) => r,
+        Err(e) => {
+            log::warn!("nl80211: GetInterface send failed: {e}");
+            return Vec::new();
+        }
+    };
 
     let mut interfaces = Vec::new();
-    for response in socket.iter::<GenlId, Genlmsghdr<Nl80211Cmd, Nl80211Attr>>(false) {
+    for response in recv {
         let msg = match response {
             Ok(m) => m,
-            Err(_) => break,
+            Err(e) => {
+                log::warn!("nl80211: recv error in GetInterface, stopping iteration: {e}");
+                break;
+            }
         };
-        if let NlPayload::Payload(genl) = msg.nl_payload {
+        if let Some(genl) = msg.get_payload() {
             let mut ifindex: Option<u32> = None;
             let mut ifname: Option<String> = None;
-            for attr in genl.get_attr_handle().iter() {
-                match attr.nla_type.nla_type {
+            for attr in genl.attrs().get_attr_handle().iter() {
+                match attr.nla_type().nla_type() {
                     Nl80211Attr::Ifindex => {
-                        let bytes = attr.nla_payload.as_ref();
+                        let bytes = attr.nla_payload().as_ref();
                         if bytes.len() >= 4 {
                             // netlink delivers integers in host byte order
                             ifindex =
@@ -153,7 +174,7 @@ fn get_interface_list(socket: &mut NlSocketHandle, family_id: u16) -> Vec<(u32, 
                         }
                     }
                     Nl80211Attr::Ifname => {
-                        let bytes = attr.nla_payload.as_ref();
+                        let bytes = attr.nla_payload().as_ref();
                         let end = match bytes.iter().position(|&b| b == 0) {
                             Some(pos) => pos,
                             None => bytes.len(),
@@ -177,29 +198,46 @@ fn get_interface_list(socket: &mut NlSocketHandle, family_id: u16) -> Vec<(u32, 
 
 /// Query nl80211 scan results for a specific interface and return the SSID of
 /// the currently associated BSS, or `None` if the interface is not connected.
-fn ssid_for_ifindex(socket: &mut NlSocketHandle, family_id: u16, ifindex: u32) -> Option<String> {
-    let mut attrs: GenlBuffer<Nl80211Attr, Buffer> = GenlBuffer::new();
-    attrs.push(Nlattr::new(false, false, Nl80211Attr::Ifindex, ifindex).ok()?);
+fn ssid_for_ifindex(socket: &NlRouter, family_id: u16, ifindex: u32) -> Option<String> {
+    let ifindex_attr = NlattrBuilder::default()
+        .nla_type(
+            AttrTypeBuilder::default()
+                .nla_type(Nl80211Attr::Ifindex)
+                .build()
+                .ok()?,
+        )
+        .nla_payload(ifindex)
+        .build()
+        .ok()?;
+    let attrs: GenlBuffer<Nl80211Attr, Buffer> = std::iter::once(ifindex_attr).collect();
 
-    let genl_hdr = Genlmsghdr::new(Nl80211Cmd::GetScan, 1, attrs);
-    let nl_hdr = Nlmsghdr::new(
-        None,
-        family_id,
-        NlmFFlags::new(&[NlmF::Request, NlmF::Dump]),
-        None,
-        None,
-        NlPayload::Payload(genl_hdr),
-    );
-    socket.send(nl_hdr).ok()?;
+    let genl_hdr = GenlmsghdrBuilder::<Nl80211Cmd, Nl80211Attr, NoUserHeader>::default()
+        .cmd(Nl80211Cmd::GetScan)
+        .version(1)
+        .attrs(attrs)
+        .build()
+        .ok()?;
 
-    for response in socket.iter::<GenlId, Genlmsghdr<Nl80211Cmd, Nl80211Attr>>(false) {
+    let recv = socket
+        .send::<_, _, GenlId, Genlmsghdr<Nl80211Cmd, Nl80211Attr>>(
+            family_id,
+            NlmF::REQUEST | NlmF::DUMP,
+            NlPayload::Payload(genl_hdr),
+        )
+        .map_err(|e| log::warn!("nl80211: GetScan send failed for ifindex {ifindex}: {e}"))
+        .ok()?;
+
+    for response in recv {
         let msg = match response {
             Ok(m) => m,
-            Err(_) => break,
+            Err(e) => {
+                log::warn!("nl80211: recv error in GetScan for ifindex {ifindex}, stopping iteration: {e}");
+                break;
+            }
         };
-        if let NlPayload::Payload(genl) = msg.nl_payload {
-            for attr in genl.get_attr_handle().iter() {
-                if attr.nla_type.nla_type == Nl80211Attr::Bss {
+        if let Some(genl) = msg.get_payload() {
+            for attr in genl.attrs().get_attr_handle().iter() {
+                if let Nl80211Attr::Bss = attr.nla_type().nla_type() {
                     if let Some(ssid) = ssid_from_bss_attr(attr) {
                         return Some(ssid);
                     }
@@ -217,9 +255,9 @@ fn ssid_for_ifindex(socket: &mut NlSocketHandle, family_id: u16, ifindex: u32) -
 /// use [`get_ssid_for_interface`] to target a specific adapter.
 #[cfg(target_os = "linux")]
 pub fn get_ssid() -> Option<String> {
-    let (mut socket, family_id) = open_socket()?;
-    for (ifindex, _) in get_interface_list(&mut socket, family_id) {
-        if let Some(ssid) = ssid_for_ifindex(&mut socket, family_id, ifindex) {
+    let (socket, family_id) = open_socket()?;
+    for (ifindex, _) in get_interface_list(&socket, family_id) {
+        if let Some(ssid) = ssid_for_ifindex(&socket, family_id, ifindex) {
             return Some(ssid);
         }
     }
@@ -230,12 +268,12 @@ pub fn get_ssid() -> Option<String> {
 /// connected or does not exist.
 #[cfg(target_os = "linux")]
 pub fn get_ssid_for_interface(interface_name: &str) -> Option<String> {
-    let (mut socket, family_id) = open_socket()?;
-    let ifindex = get_interface_list(&mut socket, family_id)
+    let (socket, family_id) = open_socket()?;
+    let ifindex = get_interface_list(&socket, family_id)
         .into_iter()
         .find(|(_, name)| name == interface_name)
         .map(|(idx, _)| idx)?;
-    ssid_for_ifindex(&mut socket, family_id, ifindex)
+    ssid_for_ifindex(&socket, family_id, ifindex)
 }
 
 #[cfg(test)]

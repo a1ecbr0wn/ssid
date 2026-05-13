@@ -9,7 +9,9 @@ use windows::core::GUID;
 fn open_handle() -> Option<HANDLE> {
     let mut negotiated_ver = 0u32;
     let mut handle = HANDLE::default();
-    if unsafe { WlanOpenHandle(2, None, &mut negotiated_ver, &mut handle) } != 0 {
+    let result = unsafe { WlanOpenHandle(2, None, &mut negotiated_ver, &mut handle) };
+    if result != 0 {
+        log::warn!("wlan: WlanOpenHandle failed with code {result}");
         return None;
     }
     Some(handle)
@@ -17,7 +19,9 @@ fn open_handle() -> Option<HANDLE> {
 
 fn enum_interface_guids(handle: HANDLE) -> Vec<(String, GUID)> {
     let mut list_ptr = std::ptr::null_mut();
-    if unsafe { WlanEnumInterfaces(handle, None, &mut list_ptr) } != 0 {
+    let result = unsafe { WlanEnumInterfaces(handle, None, &mut list_ptr) };
+    if result != 0 {
+        log::warn!("wlan: WlanEnumInterfaces failed with code {result}");
         return Vec::new();
     }
     let list = unsafe { &*list_ptr };
@@ -57,9 +61,14 @@ fn query_ssid(handle: HANDLE, guid: &GUID) -> Option<String> {
         )
     };
     if result != 0 {
+        log::warn!("wlan: WlanQueryInterface failed with code {result}");
+        if !data_ptr.is_null() {
+            unsafe { WlanFreeMemory(data_ptr) };
+        }
         return None;
     }
     if (data_size as usize) < std::mem::size_of::<WLAN_CONNECTION_ATTRIBUTES>() {
+        log::warn!("wlan: WlanQueryInterface returned undersized buffer ({data_size} bytes)");
         unsafe { WlanFreeMemory(data_ptr) };
         return None;
     }
