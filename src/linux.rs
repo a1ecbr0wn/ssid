@@ -274,10 +274,16 @@ pub fn get_ssid() -> Option<String> {
 #[cfg(target_os = "linux")]
 pub fn get_ssid_for_interface(interface_name: &str) -> Option<String> {
     let (socket, family_id) = open_socket()?;
-    let ifindex = get_interface_list(&socket, family_id)
+    let ifindex = match get_interface_list(&socket, family_id)
         .into_iter()
         .find(|(_, name)| name == interface_name)
-        .map(|(idx, _)| idx)?;
+    {
+        Some((idx, _)) => idx,
+        None => {
+            log::warn!("nl80211: interface '{interface_name}' not found");
+            return None;
+        }
+    };
     ssid_for_ifindex(&socket, family_id, ifindex)
 }
 

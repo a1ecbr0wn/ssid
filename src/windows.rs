@@ -98,11 +98,15 @@ pub fn get_ssid() -> Option<String> {
 pub fn get_ssid_for_interface(interface_name: &str) -> Option<String> {
     let handle = open_handle()?;
     let guids = enum_interface_guids(handle);
-    // and_then ensures WlanCloseHandle is always reached, even when no GUID matches.
-    let result = guids
-        .iter()
-        .find(|(name, _)| name == interface_name)
-        .and_then(|(_, guid)| query_ssid(handle, guid));
+    let guid = match guids.iter().find(|(name, _)| name == interface_name) {
+        Some((_, guid)) => guid,
+        None => {
+            log::warn!("wlan: interface '{interface_name}' not found");
+            unsafe { WlanCloseHandle(handle, None) };
+            return None;
+        }
+    };
+    let result = query_ssid(handle, guid);
     unsafe { WlanCloseHandle(handle, None) };
     result
 }
