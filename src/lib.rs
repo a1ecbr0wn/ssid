@@ -44,6 +44,9 @@ pub fn get_ssid() -> Option<String> {
 ///
 /// Returns `None` if the interface is not found, not wireless, not associated,
 /// or the SSID cannot be determined.
+///
+/// **Platform note:** on iOS the interface name is ignored; the function always
+/// returns the system-wide WiFi SSID (iOS exposes no per-interface selection).
 pub fn get_ssid_for_interface(interface_name: &str) -> Option<String> {
     platform::get_ssid_for_interface(interface_name)
 }

@@ -98,12 +98,14 @@ fn ssid_from_bss_attr(bss_attr: &Nlattr<Nl80211Attr, Buffer>) -> Option<String> 
             Nl80211BssAttr::Status => {
                 let bytes = attr.nla_payload.as_ref();
                 if bytes.len() >= 4 {
+                    // netlink delivers integers in host byte order
                     status = Some(u32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]));
                 }
             }
             Nl80211BssAttr::InformationElements => {
                 ssid = ssid_from_ies(attr.nla_payload.as_ref());
             }
+            // neli may surface kernel attribute IDs not mapped in this enum
             _ => {}
         }
     }
@@ -145,18 +147,23 @@ fn get_interface_list(socket: &mut NlSocketHandle, family_id: u16) -> Vec<(u32, 
                     Nl80211Attr::Ifindex => {
                         let bytes = attr.nla_payload.as_ref();
                         if bytes.len() >= 4 {
+                            // netlink delivers integers in host byte order
                             ifindex =
                                 Some(u32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]));
                         }
                     }
                     Nl80211Attr::Ifname => {
                         let bytes = attr.nla_payload.as_ref();
-                        let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+                        let end = match bytes.iter().position(|&b| b == 0) {
+                            Some(pos) => pos,
+                            None => bytes.len(),
+                        };
                         let name = String::from_utf8_lossy(&bytes[..end]).into_owned();
                         if !name.is_empty() {
                             ifname = Some(name);
                         }
                     }
+                    // neli may surface kernel attribute IDs not mapped in this enum
                     _ => {}
                 }
             }

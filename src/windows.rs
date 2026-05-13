@@ -59,6 +59,10 @@ fn query_ssid(handle: HANDLE, guid: &GUID) -> Option<String> {
     if result != 0 {
         return None;
     }
+    if (data_size as usize) < std::mem::size_of::<WLAN_CONNECTION_ATTRIBUTES>() {
+        unsafe { WlanFreeMemory(data_ptr) };
+        return None;
+    }
     let attrs = unsafe { &*(data_ptr as *const WLAN_CONNECTION_ATTRIBUTES) };
     let dot11 = &attrs.wlanAssociationAttributes.dot11Ssid;
     let len = dot11.uSSIDLength as usize;
@@ -77,8 +81,9 @@ pub fn get_ssid() -> Option<String> {
 }
 
 /// `interface_name` is matched against the adapter's description string
-/// (`strInterfaceDescription`), e.g. `"Intel(R) Wi-Fi 6 AX200 160MHz"`.
-/// To discover available names call `WlanEnumInterfaces` or use
+/// (`strInterfaceDescription` from `WLAN_INTERFACE_INFO`), e.g.
+/// `"Intel(R) Wi-Fi 6 AX200 160MHz"` — not the friendly alias shown in
+/// Windows Settings. To discover the exact string, run
 /// `Get-NetAdapter | Select-Object Name,InterfaceDescription` in PowerShell.
 #[cfg(target_os = "windows")]
 pub fn get_ssid_for_interface(interface_name: &str) -> Option<String> {

@@ -1,13 +1,9 @@
 use objc2_core_wlan::{CWInterface, CWWiFiClient};
 use objc2_foundation::NSString;
 
-fn nsstring_to_string(s: &NSString) -> String {
-    s.to_string()
-}
-
 fn interface_ssid(iface: &CWInterface) -> Option<String> {
     let ssid = unsafe { iface.ssid() }?;
-    let s = nsstring_to_string(&ssid);
+    let s = ssid.to_string();
     if s.is_empty() { None } else { Some(s) }
 }
 

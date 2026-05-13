@@ -3,7 +3,8 @@ use std::sync::mpsc;
 use block2::RcBlock;
 use objc2_network_extension::NEHotspotNetwork;
 
-// iOS does not expose per-interface WiFi selection; delegate to get_ssid().
+/// iOS exposes only a single system-wide WiFi connection; the `interface_name`
+/// argument is ignored and the result is the same as [`get_ssid`].
 #[cfg(target_os = "ios")]
 pub fn get_ssid_for_interface(_interface_name: &str) -> Option<String> {
     get_ssid()

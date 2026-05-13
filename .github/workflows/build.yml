@@ -51,3 +51,6 @@ jobs:
 
       - name: Build
         run: cargo build --target ${{ matrix.target }}
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings

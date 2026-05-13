@@ -3,5 +3,8 @@ fn main() {
         Some(iface) => ssid::get_ssid_for_interface(&iface),
         None => ssid::get_ssid(),
     };
-    println!("{}", ssid.as_deref().unwrap_or("none"));
+    match ssid {
+        Some(s) => println!("{s}"),
+        None => println!("none"),
+    }
 }
