@@ -67,10 +67,12 @@ Uses `nl80211` over a generic netlink socket via the `neli` crate.
 ```text
 NlSocketHandle::connect(NlFamily::Generic, None, &[])
   → resolve nl80211 family id via CTRL_CMD_GETFAMILY
-  → send NL80211_CMD_GET_INTERFACE for the named interface
-  → parse NL80211_ATTR_SSID from the response attributes
-  → String::from_utf8_lossy(ssid_bytes).into_owned()
-  → on ENODEV / no SSID attr → return None
+  → get_interface_list → find entry matching interface_name
+      → if not found: log::warn!("nl80211: interface '...' not found") → return None
+  → ssid_for_ifindex using the matched ifindex
+      → parse NL80211_ATTR_SSID from the response attributes
+      → String::from_utf8_lossy(ssid_bytes).into_owned()
+      → on ENODEV / no SSID attr → return None
 ```
 
 ### Linux `get_ssid`
@@ -160,6 +162,8 @@ Uses the `windows` crate with feature `Win32_NetworkManagement_Wlan`.
 WlanOpenHandle(dwClientVersion=2) → client_handle
 WlanEnumInterfaces(client_handle) → interface list
   → find entry whose strInterfaceDescription matches interface_name
+      → if not found: log::warn!("wlan: interface '...' not found")
+                      WlanCloseHandle(client_handle) → return None
   → get GUID
 WlanQueryInterface(
     client_handle,
@@ -176,7 +180,7 @@ WlanCloseHandle(client_handle)
 ```
 
 `WlanFreeMemory` and `WlanCloseHandle` are called on all exit paths (including
-error paths) to prevent handle leaks.
+error paths and the no-GUID-match early return) to prevent handle leaks.
 
 ### Windows `get_ssid`
 
@@ -198,8 +202,9 @@ pub fn get_ssid_for_interface(_: &str) -> Option<String> { None }
 
 ## Dependencies
 
-| Crate     | Platform | Notes                                                |
-| --------- | -------- | ---------------------------------------------------- |
+| Crate                     | Platform     | Notes                                                 |
+| ------------------------- | ------------ | ----------------------------------------------------- |
+| `log`                     | all          | diagnostic `warn!` messages for silent `None` returns |
 | `neli`                    | Linux        | generic netlink socket and nl80211 attribute parsing  |
 | `objc2-core-wlan`         | macOS        | safe Rust bindings for `CWWiFiClient` / `CWInterface` |
 | `objc2-foundation`        | macOS        | `NSString` conversion                                 |

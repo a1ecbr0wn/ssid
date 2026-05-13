@@ -107,7 +107,24 @@ target platform.
 
 ---
 
-### Requirement 4: Testing
+### Requirement 4: Diagnostics
+
+**User Story:** As a developer debugging WiFi resolution, I need silent `None` returns
+to emit a warning so I can tell the difference between "not connected" and "interface
+name typo".
+
+#### Diagnostics Acceptance Criteria
+
+1. THE crate SHALL emit a `log::warn!` message when `get_ssid_for_interface` returns
+   `None` due to the named interface not being found (as opposed to the interface
+   existing but not being associated).
+2. THE crate SHALL use the `log` facade crate — callers provide the concrete logger.
+3. When no interface is found, the warning SHALL include the interface name provided by
+   the caller.
+
+---
+
+### Requirement 5: Testing
 
 **User Story:** As a contributor, I need the test suite to run cleanly in CI
 environments where no WiFi hardware is present.
