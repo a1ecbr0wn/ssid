@@ -7,6 +7,9 @@ use windows::Win32::NetworkManagement::WiFi::{
 use windows::core::GUID;
 
 /// Open a WLAN client handle, requesting client API version 2.
+///
+/// Returns `None` if `WlanOpenHandle` fails. On success, the returned handle
+/// must be closed with `WlanCloseHandle`.
 fn open_handle() -> Option<HANDLE> {
     let mut negotiated_ver = 0u32;
     let mut handle = HANDLE::default();
@@ -18,7 +21,12 @@ fn open_handle() -> Option<HANDLE> {
     Some(handle)
 }
 
-/// Enumerate all WLAN interfaces, returning `(strInterfaceDescription, GUID)` pairs.
+/// Enumerate all WLAN interfaces and return their description strings and GUIDs.
+///
+/// Returns a vector of `(interface_description, interface_guid)` pairs. The description
+/// is the adapter's `strInterfaceDescription` (e.g. `"Intel(R) Wi-Fi 6 AX200 160MHz"`).
+/// Returns an empty vector if enumeration fails. Always frees the enumeration buffer
+/// on success.
 fn enum_interface_guids(handle: HANDLE) -> Vec<(String, GUID)> {
     let mut list_ptr = std::ptr::null_mut();
     let result = unsafe { WlanEnumInterfaces(handle, None, &mut list_ptr) };
@@ -47,10 +55,11 @@ fn enum_interface_guids(handle: HANDLE) -> Vec<(String, GUID)> {
     result
 }
 
-/// Query the current connection attributes for `guid` and extract the SSID.
+/// Query the current connection attributes for a WLAN interface and extract the SSID.
 ///
-/// Returns `None` if the interface is not connected, the query fails, or the
-/// SSID is empty. Always frees the buffer returned by `WlanQueryInterface`.
+/// Returns the SSID of the interface associated with the given `guid`, or `None`
+/// if the interface is not connected, the query fails, or the SSID is empty.
+/// Always frees the buffer allocated by `WlanQueryInterface`.
 fn query_ssid(handle: HANDLE, guid: &GUID) -> Option<String> {
     let mut data_size = 0u32;
     let mut data_ptr: *mut c_void = std::ptr::null_mut();

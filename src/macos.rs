@@ -1,6 +1,10 @@
 use objc2_core_wlan::{CWInterface, CWWiFiClient};
 use objc2_foundation::NSString;
 
+/// Extract the SSID from a `CWInterface` object.
+///
+/// Returns `None` if the interface has no associated SSID or if the SSID is
+/// empty (hidden network).
 #[cfg(target_os = "macos")]
 fn interface_ssid(iface: &CWInterface) -> Option<String> {
     let ssid = unsafe { iface.ssid() }?;
